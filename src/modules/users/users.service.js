@@ -160,4 +160,42 @@ async function getApiKeyForUser(id, requesterId, requesterRole) {
   return user;
 }
 
-module.exports = { getAllUsers, getUserById, updateUser, softDeleteUser, getApiKeyForUser };
+// ─── Database Backup Logs ───────────────────────────────────────────────────
+
+async function createBackupLog({ action, targetDatabase, backupLocation }, requestedBy) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  const log = await prisma.databaseBackupLog.create({
+    data: { action, requestedBy, targetDatabase, backupLocation, expiresAt },
+  });
+
+  return log;
+}
+
+async function getAllBackupLogs() {
+  return prisma.databaseBackupLog.findMany({ orderBy: { createdAt: 'desc' } });
+}
+
+async function updateBackupLog(id, { status }) {
+  const log = await prisma.databaseBackupLog.findUnique({ where: { id } });
+
+  if (!log) {
+    const err = new Error('Backup log not found');
+    err.statusCode = 404;
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  return prisma.databaseBackupLog.update({ where: { id }, data: { status } });
+}
+
+module.exports = {
+  getAllUsers,
+  getUserById,
+  updateUser,
+  softDeleteUser,
+  getApiKeyForUser,
+  createBackupLog,
+  getAllBackupLogs,
+  updateBackupLog,
+};

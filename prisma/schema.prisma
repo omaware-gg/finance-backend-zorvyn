@@ -6,3 +6,109 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  DATA_LAKE_OWNER
+  ANALYST_WRITE
+  ANALYST_READ
+  VIEWER
+  NO_ACCESS
+}
+
+enum RecordType {
+  INCOME
+  EXPENSE
+}
+
+// ─── User ───────────────────────────────────────────────────────────────────
+
+model User {
+  id         String    @id @default(cuid())
+  name       String
+  email      String    @unique
+  password   String
+  role       Role      @default(VIEWER)
+  isActive   Boolean   @default(true)
+  apiKey     String    @unique @default(uuid())
+  headerName String    @unique
+  otpSecret  String?
+  otpEnabled Boolean   @default(false)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  records FinancialRecord[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+// ─── FinancialRecord ────────────────────────────────────────────────────────
+// Designed for AWS Athena compatibility:
+//   • Standard scalar types only (no JSON on analytical fields)
+//   • date → DATE via Glue catalog
+//   • partitionKey "YYYY-MM" maps to S3 partition paths on export
+//   • Decimal amounts map to DECIMAL in Athena
+
+model FinancialRecord {
+  id           String     @id @default(cuid())
+  amount       Decimal    @db.Decimal(15, 2)
+  type         RecordType
+  category     String
+  date         DateTime
+  partitionKey String
+  notes        String?
+
+  // Audit
+  addedBy        String
+  addedOn        DateTime  @default(now())
+  lastModifiedBy String?
+  lastModifiedAt DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
+  // Optimistic locking
+  version Int @default(0)
+
+  // Relations
+  creator User @relation(fields: [addedBy], references: [id])
+
+  @@index([partitionKey])
+  @@index([date])
+  @@index([type])
+  @@index([category])
+  @@index([addedBy])
+  @@index([deletedAt])
+}
+
+// ─── DatabaseBackupLog ──────────────────────────────────────────────────────
+
+model DatabaseBackupLog {
+  id             String   @id @default(cuid())
+  action         String
+  requestedBy    String
+  targetDatabase String
+  backupLocation String
+  expiresAt      DateTime
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+}
+
+// ─── OtpSession ─────────────────────────────────────────────────────────────
+
+model OtpSession {
+  id        String   @id @default(cuid())
+  userId    String
+  otp       String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

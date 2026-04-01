@@ -4,6 +4,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
+const config = require('./config/env');
 const { errorHandler } = require('./middlewares/error.middleware');
 const { setupSwagger } = require('./docs/swagger');
 const { setupAdminJS } = require('./admin/adminjs.setup');
@@ -18,24 +19,26 @@ const app = express();
 // ── Security & parsing ──────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({ origin: '*' })); // Restrict origin in production
-app.use(morgan('dev'));
+if (config.nodeEnv !== 'test') app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ── Global rate limiter ─────────────────────────────────────────────────────
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      success: false,
-      message: 'Too many requests. Please try again later.',
-      code: 'RATE_LIMITED',
-    },
-  })
-);
+// ── Global rate limiter (disabled in test environment) ──────────────────────
+if (config.nodeEnv !== 'test') {
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        success: false,
+        message: 'Too many requests. Please try again later.',
+        code: 'RATE_LIMITED',
+      },
+    })
+  );
+}
 
 // ── AdminJS (async bootstrap) ───────────────────────────────────────────────
 async function bootstrap() {
